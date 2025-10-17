@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kenya Counties Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --card-bg: #22223b;
+            --border-color: #4a4e69;
+            --text-color: #e0e0e0;
+            --primary-accent: #6c4bda;
+            --secondary-accent: #b8b8d1;
+            --green-active: #2ecc71;
+            --red-error: #e74c3c;
+        }
+
+        [data-theme="light"] {
+            --bg-color: #f8f9fa;
+            --card-bg: #ffffff;
+            --border-color: #dee2e6;
+            --text-color: #212529;
+            --primary-accent: #007bff;
+            --secondary-accent: #6c757d;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .app-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5em;
+            color: var(--primary-accent);
+        }
+
+        .county-boundary {
+            fillColor: var(--primary-accent);
+            fillOpacity: 0.1;
+            color: var(--primary-accent);
+            weight: 2;
+            opacity: 0.8;
+        }
+
+        .county-boundary:hover {
+            fillOpacity: 0.3;
+            weight: 3;
+            cursor: pointer;
+        }
+
+        .county-boundary.selected {
+            fillColor: var(--green-active);
+            fillOpacity: 0.4;
+            weight: 4;
+            color: var(--green-active);
+        }
+
+        .county-tooltip {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-size: 14px;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .theme-toggle, .basemap-toggle {
+            background: none;
+            border: 2px solid var(--primary-accent);
+            color: var(--primary-accent);
+            padding: 8px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .theme-toggle:hover, .basemap-toggle:hover {
+            background-color: var(--primary-accent);
+            color: var(--text-color);
+        }
+
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .status-message {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--green-active);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            z-index: 1002;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            display: none;
+            animation: fadeInOut 3s ease-in-out;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        .county-info-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 15px;
+            width: 300px;
+            max-height: 200px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .county-info-title {
+            font-size: 1.1em;
+            color: var(--primary-accent);
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .county-info-content {
+            font-size: 0.9em;
+            color: var(--secondary-accent);
+        }
+
+        .county-property {
+            margin-bottom: 5px;
+        }
+
+        .county-property strong {
+            color: var(--text-color);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="header">
+            <h1><i class="fas fa-map"></i> Kenya Counties Map</h1>
+            <div class="header-controls">
+                <button class="theme-toggle" id="themeToggle">
+                    <i class="fas fa-moon"></i> Dark
+                </button>
+                <button class="basemap-toggle" id="basemapToggle">
+                    <i class="fas fa-map"></i> Standard
+                </button>
+            </div>
+        </div>
+
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+
+        <div class="county-info-panel" id="countyInfoPanel" style="display: none;">
+            <div class="county-info-title" id="countyInfoTitle">County Information</div>
+            <div class="county-info-content" id="countyInfoContent"></div>
+        </div>
+
+        <!-- Status Message -->
+        <div class="status-message" id="statusMessage"></div>
+    </div>
+
+    <script>
+        // Global variables
+        let map;
+        let currentTheme = 'dark';
+        let currentBasemap = 'standard';
+        let countyLayers = [];
+        let selectedCounty = null;
+
+        // Initialize map
+        function initMap() {
+            map = L.map('map', {
+                center: [-1.2864, 36.8172],
+                zoom: 7,
+                zoomControl: false
+            });
+
+            updateBasemap();
+
+            // Add zoom control in bottom right
+            L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+            loadCounties();
+        }
+
+        // Update basemap
+        function updateBasemap() {
+            // Remove existing layers
+            map.eachLayer(function(layer) {
+                if (layer instanceof L.TileLayer) {
+                    map.removeLayer(layer);
+                }
+            });
+
+            if (currentBasemap === 'satellite') {
+                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+                }).addTo(map);
+            } else {
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+            }
+        }
+
+        // Load counties
+        async function loadCounties() {
+            try {
+                const response = await fetch('http://localhost:5000/api/counties');
+                const data = await response.json();
+
+                if (data.success) {
+                    // Use actual county geometries from API
+                    const countiesGeoJSON = {
+                        type: "FeatureCollection",
+                        features: data.counties.map(county => ({
+                            type: "Feature",
+                            properties: {
+                                code: county.code,
+                                name: county.name,
+                                CONSTITUEN: county.CONSTITUEN,
+                                CONST_CODE: county.CONST_CODE,
+                                COUNTY_COD: county.COUNTY_COD,
+                                COUNTY_NAM: county.COUNTY_NAM,
+                                ID_: county.ID_,
+                                OBJECTID: county.OBJECTID,
+                                Shape_Area: county.Shape_Area,
+                                Shape_Leng: county.Shape_Leng,
+                                'system:index': county['system:index']
+                            },
+                            geometry: county.geometry
+                        }))
+                    };
+
+                    // Add county boundaries to map
+                    countyLayers = L.geoJSON(countiesGeoJSON, {
+                        style: function(feature) {
+                            return {
+                                color: 'var(--primary-accent)',
+                                weight: 2,
+                                opacity: 0.8,
+                                fillColor: 'var(--primary-accent)',
+                                fillOpacity: 0.1
+                            };
+                        },
+                        onEachFeature: function(feature, layer) {
+                            layer.bindTooltip(feature.properties.name, {
+                                permanent: false,
+                                direction: 'center',
+                                className: 'county-tooltip'
+                            });
+
+                            layer.on('mouseover', function(e) {
+                                if (!layer.selected) {
+                                    layer.setStyle({
+                                        fillOpacity: 0.3,
+                                        weight: 3,
+                                        cursor: 'pointer'
+                                    });
+                                }
+                                showCountyInfo(feature.properties);
+                            });
+
+                            layer.on('mouseout', function(e) {
+                                if (!layer.selected) {
+                                    layer.setStyle({
+                                        fillOpacity: 0.1,
+                                        weight: 2
+                                    });
+                                }
+                                hideCountyInfo();
+                            });
+
+                            layer.on('click', function(e) {
+                                selectedCounty = feature.properties.code;
+
+                                // Highlight selected county
+                                countyLayers.forEach(l => {
+                                    l.setStyle({
+                                        fillOpacity: 0.1,
+                                        weight: 2,
+                                        color: 'var(--primary-accent)'
+                                    });
+                                    l.selected = false;
+                                });
+                                layer.setStyle({
+                                    fillOpacity: 0.4,
+                                    weight: 4,
+                                    color: 'var(--green-active)'
+                                });
+                                layer.selected = true;
+
+                                showCountyInfo(feature.properties, true);
+                            });
+                        }
+                    }).addTo(map);
+
+                    showStatusMessage('County boundaries loaded successfully');
+                } else {
+                    showStatusMessage('Failed to load county boundaries', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading counties:', error);
+                showStatusMessage('Error loading county boundaries', 'error');
+            }
+        }
+
+        // Show county information
+        function showCountyInfo(properties, permanent = false) {
+            const panel = document.getElementById('countyInfoPanel');
+            const title = document.getElementById('countyInfoTitle');
+            const content = document.getElementById('countyInfoContent');
+
+            title.textContent = properties.name || 'Unknown County';
+
+            let infoHTML = '';
+            if (properties.COUNTY_COD) infoHTML += `<div class="county-property"><strong>Code:</strong> ${properties.COUNTY_COD}</div>`;
+            if (properties.CONSTITUEN) infoHTML += `<div class="county-property"><strong>Constituency:</strong> ${properties.CONSTITUEN}</div>`;
+            if (properties.Shape_Area) infoHTML += `<div class="county-property"><strong>Area:</strong> ${Number(properties.Shape_Area).toLocaleString()} sq km</div>`;
+            if (properties.Shape_Leng) infoHTML += `<div class="county-property"><strong>Perimeter:</strong> ${Number(properties.Shape_Leng).toLocaleString()} km</div>`;
+            if (properties.OBJECTID) infoHTML += `<div class="county-property"><strong>Object ID:</strong> ${properties.OBJECTID}</div>`;
+
+            content.innerHTML = infoHTML;
+            panel.style.display = 'block';
+        }
+
+        // Hide county information
+        function hideCountyInfo() {
+            if (selectedCounty) return; // Keep panel visible if county is selected
+            document.getElementById('countyInfoPanel').style.display = 'none';
+        }
+
+        // Theme toggle
+        document.getElementById('themeToggle').addEventListener('click', () => {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.body.setAttribute('data-theme', currentTheme);
+            const icon = currentTheme === 'dark' ? 'fa-moon' : 'fa-sun';
+            const text = currentTheme === 'dark' ? 'Dark' : 'Light';
+            document.getElementById('themeToggle').innerHTML = `<i class="fas ${icon}"></i> ${text}`;
+
+            // Update county styles
+            countyLayers.forEach(layer => {
+                layer.setStyle({
+                    fillColor: 'var(--primary-accent)',
+                    color: 'var(--primary-accent)'
+                });
+            });
+        });
+
+        // Basemap toggle
+        document.getElementById('basemapToggle').addEventListener('click', () => {
+            currentBasemap = currentBasemap === 'standard' ? 'satellite' : 'standard';
+            updateBasemap();
+            const icon = currentBasemap === 'satellite' ? 'fa-satellite' : 'fa-map';
+            const text = currentBasemap === 'satellite' ? 'Satellite' : 'Standard';
+            document.getElementById('basemapToggle').innerHTML = `<i class="fas ${icon}"></i> ${text}`;
+        });
+
+        // Status message
+        function showStatusMessage(message, type = 'success') {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.style.backgroundColor = type === 'error' ? 'var(--red-error)' : 'var(--green-active)';
+            statusEl.style.display = 'block';
+
+            setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 3000);
+        }
+
+        // Initialize
+        initMap();
+    </script>
+</body>
+</html>
